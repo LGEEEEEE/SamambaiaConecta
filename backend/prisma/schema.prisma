@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Ocorrencia {
+  id           Int       @id @default(autoincrement())
+  titulo       String
+  descricao    String
+  categoria    String
+  cep          String?
+  quadra       String    // Texto livre preenchido via ViaCEP ou digitado (ex: QR 406, QN 314, QS 502)
+  localizacao  String
+  latitude     Float     @default(-15.8755)
+  longitude    Float     @default(-48.0860)
+  imagemBase64 String?
+  autor        String    @default("Denúncia Anônima")
+  anonimo      Boolean   @default(true)
+  status       String    @default("ABERTO") // "ABERTO" | "EM_ANDAMENTO" | "RESOLVIDO"
+  apoios       Int       @default(1)
+  resolvidoEm  DateTime?
+  criadoEm     DateTime  @default(now())
+}
+
+model Evento {
+  id           Int      @id @default(autoincrement())
+  titulo       String
+  descricao    String
+  dataEvento   String
+  cep          String?
+  quadra       String
+  local        String
+  latitude     Float    @default(-15.8755)
+  longitude    Float    @default(-48.0860)
+  imagemBase64 String?
+  organizador  String
+  criadoEm     DateTime @default(now())
+}
+
+// =========================================================================
+// MÓDULOS DE MONETIZAÇÃO (CORTEX TECHNOLOGIA)
+// Descomentar e rodar `npx prisma migrate dev` SOMENTE APÓS a entrega na UCB
+// =========================================================================
+
+// model Patrocinador {
+//   id             Int      @id @default(autoincrement())
+//   nomeEmpresa    String
+//   categoria      String   // "Alimentação", "Serviços", "Eventos", "Saúde"
+//   descricaoCurta String
+//   cupomDesconto  String?  // Ex: "QR406OFF10"
+//   whatsapp       String
+//   endereco       String
+//   plano          String   @default("DESTAQUE") // "BASICO" | "DESTAQUE"
+//   ativo          Boolean  @default(true)
+//   vencimento     DateTime
+//   criadoEm       DateTime @default(now())
+// }
+
+// model ApoioPix {
+//   id            Int      @id @default(autoincrement())
+//   apoiadorNome  String   @default("Apoiador Anônimo")
+//   valorCentavos Int
+//   asaasChargeId String   @unique
+//   status        String   @default("PENDING") // "PENDING" | "RECEIVED"
+//   exibirNoMural Boolean  @default(true)
+//   criadoEm      DateTime @default(now())
+// }
