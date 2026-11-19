@@ -6,7 +6,8 @@ import {
 import MapaRegiao, { CENTRO_SAMAMBAIA } from './components/MapaRegiao';
 import FormularioAvaliacao from './components/FormularioAvaliacao';
 import { comprimirImagemParaBase64 } from './utils/imageCompressor';
-import { buscarEnderecoPorCep, buscarCepPorCoordenadas } from './utils/geoCepService';
+import ModalBoasVindas from './components/ModalBoasVindas';
+import { buscarEnderecoPorCep, buscarCepPorCoordenadas, buscarCepPorQuadra } from './utils/geoCepService';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -56,6 +57,15 @@ export default function App() {
     } catch {
       setErroForm('Sem conexão com o servidor da API.');
     }
+  };
+
+  const [mostrarBoasVindas, setMostrarBoasVindas] = useState(() => {
+    return !localStorage.getItem('samambaia_conecta_boas_vindas');
+  });
+
+  const fecharBoasVindas = () => {
+    localStorage.setItem('samambaia_conecta_boas_vindas', 'true');
+    setMostrarBoasVindas(false);
   };
 
   useEffect(() => {
@@ -267,6 +277,7 @@ export default function App() {
 
   return (
     <div data-bs-theme="dark" className="min-vh-100 bg-dark text-light">
+      <ModalBoasVindas aberto={mostrarBoasVindas} onFechar={fecharBoasVindas} />
       {/* Navbar */}
       <nav className="navbar navbar-dark bg-black border-bottom border-secondary-subtle py-2">
         <div className="container d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -298,7 +309,7 @@ export default function App() {
                 </button>
               </>
             )}
-            
+
           </div>
         </div>
       </nav>
@@ -328,6 +339,13 @@ export default function App() {
               onClick={() => { setAba('avaliacao'); setErroForm(''); setInfoFoto(''); }}
             >
               <MessageSquare size={15} /> Avaliar Portal
+            </button>
+            <button
+              className="btn btn-outline-secondary btn-sm"
+              onClick={() => setMostrarBoasVindas(true)}
+              title="Sobre o portal"
+            >
+              Sobre
             </button>
           </li>
         </ul>
@@ -425,6 +443,18 @@ export default function App() {
                         placeholder="Ex: QR 406"
                         value={formOcorrencia.quadra}
                         onChange={(e) => setFormOcorrencia({ ...formOcorrencia, quadra: e.target.value })}
+                        onBlur={async () => {
+                          if (!formOcorrencia.cep && formOcorrencia.quadra.trim().length >= 5) {
+                            const achado = await buscarCepPorQuadra(formOcorrencia.quadra, formOcorrencia.localizacao);
+                            if (achado) {
+                              setFormOcorrencia((p) => ({
+                                ...p,
+                                cep: achado.cep,
+                                localizacao: p.localizacao || achado.localizacao,
+                              }));
+                            }
+                          }
+                        }}
                         required
                       />
                     </div>
@@ -593,7 +623,25 @@ export default function App() {
                     </div>
                     <div className="col-7">
                       <label className="form-label small text-secondary">Quadra / Setor</label>
-                      <input className="form-control form-control-sm" placeholder="Ex: QR 406" value={formEvento.quadra} onChange={(e) => setFormEvento({ ...formEvento, quadra: e.target.value })} required />
+                      <input
+                        className="form-control form-control-sm"
+                        placeholder="Ex: QR 406"
+                        value={formEvento.quadra}
+                        onChange={(e) => setFormEvento({ ...formEvento, quadra: e.target.value })}
+                        onBlur={async () => {
+                          if (!formEvento.cep && formEvento.quadra.trim().length >= 5) {
+                            const achado = await buscarCepPorQuadra(formEvento.quadra, formEvento.local);
+                            if (achado) {
+                              setFormEvento((p) => ({
+                                ...p,
+                                cep: achado.cep,
+                                local: p.local || achado.localizacao,
+                              }));
+                            }
+                          }
+                        }}
+                        required
+                      />
                     </div>
                   </div>
                   <div className="mb-3">

@@ -1,7 +1,15 @@
-export async function buscarEnderecoPorCep(cep) {
-  const limpo = cep.replace(/\D/g, '');
+// frontend/src/utils/geoCepService.js
+
+function extrairQuadra(texto = '') {
+  const match = texto.match(/\b(Q[NRS]\s*\d+|ADE\s*\d+|SHSN|Setor\s+\w+)\b/i);
+  return match ? match[0].toUpperCase().replace(/\s+/, ' ') : '';
+}
+
+// 1. Busca oficial pelo CEP (ViaCEP -> Quadra e Conjunto exatos)
+export async function buscarEnderecoPorCep(cepDigitado) {
+  const limpo = cepDigitado.replace(/\D/g, '');
   if (limpo.length !== 8) {
-    throw new Error('Digite um CEP válido com 8 números.');
+    throw new Error('CEP inválido. Digite os 8 números.');
   }
 
   const res = await fetch(`https://viacep.com.br/ws/${limpo}/json/`);
@@ -11,52 +19,87 @@ export async function buscarEnderecoPorCep(cep) {
     throw new Error('CEP não encontrado na base dos Correios.');
   }
 
-  // Extrai a quadra do logradouro (ex: "Quadra QR 406 Conjunto 10" -> "QR 406")
-  const matchQuadra = data.logradouro?.match(/(Q[NRS]\s*\d+|SMT)/i);
-  const quadraDetectada = matchQuadra
-    ? matchQuadra[0].toUpperCase()
-    : (data.logradouro || data.bairro || '');
+  const logradouro = data.logradouro || '';
+  const quadraExtraida = extrairQuadra(logradouro) || data.bairro || 'Samambaia';
 
-  // Busca coordenadas aproximadas da quadra/CEP em Samambaia
+  // Geocodificação estruturada para posicionar o pino no mapa
   let coords = null;
   try {
-    const query = encodeURIComponent(`${data.logradouro || ''}, ${data.bairro || 'Samambaia'}, Brasília, DF`);
-    const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`);
+    const query = encodeURIComponent(`${logradouro}, Samambaia, Brasília, DF, Brasil`);
+    const geoRes = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${query}`
+    );
     const geoData = await geoRes.json();
-    if (geoData?.[0]) {
+    if (Array.isArray(geoData) && geoData[0]) {
       coords = [parseFloat(geoData[0].lat), parseFloat(geoData[0].lon)];
     }
   } catch {
-    // Fallback silencioso se Nominatim demorar
+    // Se o mapa não achar a coordenada exata, mantém os dados oficiais do CEP
   }
 
   return {
     cep: data.cep,
-    quadra: quadraDetectada,
-    localizacao: [data.logradouro, data.bairro].filter(Boolean).join(' - '),
+    quadra: quadraExtraida,
+    localizacao: logradouro || data.bairro || 'Samambaia - DF',
     coords,
   };
 }
 
+// 2. Busca reversa na base do ViaCEP usando Quadra + Conjunto (ex: "QR 406", "Conjunto 30")
+export async function buscarCepPorQuadra(quadra, complemento = '') {
+  const termo = `${quadra} ${complemento}`.trim();
+  if (termo.length < 4) return null;
+
+  try {
+    const encoded = encodeURIComponent(termo);
+    const res = await fetch(`https://viacep.com.br/ws/DF/Brasilia/${encoded}/json/`);
+    const lista = await res.json();
+
+    if (Array.isArray(lista) && lista.length > 0) {
+      // Filtra apenas resultados de Samambaia (CEPs iniciados em 723)
+      const samambaia = lista.find((item) => item.cep?.startsWith('723')) || lista[0];
+      return {
+        cep: samambaia.cep,
+        quadra: extrairQuadra(samambaia.logradouro) || quadra.toUpperCase(),
+        localizacao: samambaia.logradouro,
+      };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+// 3. Clique no mapa ou GPS -> tenta identificar quadra e valida o CEP no ViaCEP
 export async function buscarCepPorCoordenadas(lat, lng) {
   const res = await fetch(
-    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
+    `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
   );
   const data = await res.json();
-  const cepBruto = data?.address?.postcode;
+  const addr = data.address || {};
 
-  if (cepBruto) {
-    return await buscarEnderecoPorCep(cepBruto);
+  const rua = addr.road || addr.suburb || addr.neighbourhood || '';
+  const quadra = extrairQuadra(rua) || extrairQuadra(data.display_name || '');
+  let cep = addr.postcode ? addr.postcode.replace(/\D/g, '') : '';
+  if (cep.length === 8) {
+    cep = `${cep.slice(0, 5)}-${cep.slice(5)}`;
   }
 
-  const road = data?.address?.road || '';
-  const suburb = data?.address?.suburb || 'Samambaia';
-  const matchQuadra = road.match(/(Q[NRS]\s*\d+|SMT)/i);
+  // Se o OSM não souber o CEP da rua, consulta o ViaCEP pela quadra encontrada
+  if (!cep && quadra) {
+    const viaCepMatch = await buscarCepPorQuadra(quadra);
+    if (viaCepMatch) {
+      return {
+        cep: viaCepMatch.cep,
+        quadra: viaCepMatch.quadra,
+        localizacao: rua || viaCepMatch.localizacao,
+      };
+    }
+  }
 
   return {
-    cep: '',
-    quadra: matchQuadra ? matchQuadra[0].toUpperCase() : suburb,
-    localizacao: [road, suburb].filter(Boolean).join(' - '),
-    coords: [lat, lng],
+    cep,
+    quadra,
+    localizacao: rua || 'Ponto marcado no mapa',
   };
 }
