@@ -80,14 +80,14 @@ Execute as migrações e inicie o servidor:
 
 Bash
 npx prisma generate
-npm run dev
+npm start
 3. Configurar e rodar o Frontend
 Em outro terminal:
 
 Bash
 cd frontend
 npm install
-npm run dev
+npm start
 Acesse http://localhost:5173 no navegador.
 
 👥 Autores e Instituição
