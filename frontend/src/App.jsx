@@ -7,7 +7,7 @@ import MapaRegiao, { CENTRO_SAMAMBAIA } from './components/MapaRegiao';
 import { comprimirImagemParaBase64 } from './utils/imageCompressor';
 import { buscarEnderecoPorCep, buscarCepPorCoordenadas } from './utils/geoCepService';
 
-const API_URL = 'http://localhost:3333/api';
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 export default function App() {
   const [aba, setAba] = useState('ocorrencias');
