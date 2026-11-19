@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import {
   MapPin, AlertTriangle, Calendar, ThumbsUp, LocateFixed,
-  CheckCircle2, Clock, Camera, Shield, Layers, Search
+  CheckCircle2, Clock, Camera, Shield, Layers, Search, MessageSquare
 } from 'lucide-react';
 import MapaRegiao, { CENTRO_SAMAMBAIA } from './components/MapaRegiao';
+import FormularioAvaliacao from './components/FormularioAvaliacao';
 import { comprimirImagemParaBase64 } from './utils/imageCompressor';
 import { buscarEnderecoPorCep, buscarCepPorCoordenadas } from './utils/geoCepService';
 
@@ -53,7 +54,7 @@ export default function App() {
       setOcorrencias(Array.isArray(dataOc) ? dataOc : []);
       setEventos(Array.isArray(dataEv) ? dataEv : []);
     } catch {
-      setErroForm('Sem conexão com o servidor da API na porta 3333.');
+      setErroForm('Sem conexão com o servidor da API.');
     }
   };
 
@@ -61,7 +62,6 @@ export default function App() {
     carregarDados();
   }, []);
 
-  // Pega GPS do celular/navegador + converte em CEP via Nominatim/ViaCEP
   const usarMinhaLocalizacao = (tipo) => {
     setErroForm('');
     if (!navigator.geolocation) {
@@ -95,7 +95,7 @@ export default function App() {
             }));
           }
         } catch {
-          // Mantém as coordenadas capturadas mesmo se o CEP falhar
+          // Mantém coordenadas capturadas
         } finally {
           setBuscandoGeo(false);
         }
@@ -108,7 +108,6 @@ export default function App() {
     );
   };
 
-  // Busca manual por CEP no ViaCEP
   const handleBuscarCep = async (cepDigitado, tipo) => {
     setErroForm('');
     const limpo = cepDigitado.replace(/\D/g, '');
@@ -167,7 +166,7 @@ export default function App() {
         }));
       }
     } catch {
-      // Mantém o ponto marcado no mapa mesmo se a rua não tiver CEP cadastrado no OSM
+      // Mantém ponto no mapa
     } finally {
       setBuscandoGeo(false);
     }
@@ -181,7 +180,7 @@ export default function App() {
 
     try {
       const res = await comprimirImagemParaBase64(file);
-      setInfoFoto(`Imagem otimizada: ${res.originalKB} KB para ${res.finalKB} KB`);
+      setInfoFoto(`Imagem otimizada: ${res.originalKB} KB → ${res.finalKB} KB`);
       if (tipo === 'ocorrencia') setFormOcorrencia((p) => ({ ...p, imagemBase64: res.base64 }));
       else setFormEvento((p) => ({ ...p, imagemBase64: res.base64 }));
     } catch (err) {
@@ -269,108 +268,124 @@ export default function App() {
   return (
     <div data-bs-theme="dark" className="min-vh-100 bg-dark text-light">
       {/* Navbar */}
-      <nav className="navbar navbar-dark bg-black border-bottom border-secondary-subtle py-3">
+      <nav className="navbar navbar-dark bg-black border-bottom border-secondary-subtle py-2">
         <div className="container d-flex justify-content-between align-items-center flex-wrap gap-2">
-          <div>
-            <span className="badge text-bg-primary text-uppercase mb-1">Radar Urbano • Samambaia DF</span>
-            <h1 className="h4 mb-0 fw-bold">Samambaia Conecta</h1>
-            <small className="text-secondary">Zeladoria comunitária, geolocalização e agenda pública (Samambaia Norte & Sul)</small>
+          <div
+            className="d-flex align-items-center gap-2"
+            style={{ cursor: 'pointer' }}
+            onClick={() => setAba('ocorrencias')}
+          >
+            <span className="badge text-bg-primary">DF</span>
+            <h1 className="h5 mb-0 fw-bold">Samambaia Conecta</h1>
           </div>
           <div className="d-flex gap-2">
-            <button
-              className="btn btn-outline-info btn-sm d-flex align-items-center gap-2"
-              onClick={() => usarMinhaLocalizacao(aba === 'ocorrencias' ? 'ocorrencia' : 'evento')}
-              disabled={buscandoGeo}
-            >
-              <LocateFixed size={16} />
-              {buscandoGeo ? 'Localizando...' : 'Minha Localização'}
-            </button>
-            <button
-              className="btn btn-outline-light btn-sm d-flex align-items-center gap-2"
-              onClick={() => setCamadaSatelite(!camadaSatelite)}
-            >
-              <Layers size={16} />
-              {camadaSatelite ? 'Mapa' : 'Satélite'}
-            </button>
+            {aba !== 'avaliacao' && (
+              <>
+                <button
+                  className="btn btn-outline-info btn-sm d-flex align-items-center gap-1"
+                  onClick={() => usarMinhaLocalizacao(aba === 'eventos' ? 'evento' : 'ocorrencia')}
+                  disabled={buscandoGeo}
+                >
+                  <LocateFixed size={15} />
+                  {buscandoGeo ? 'Localizando...' : 'GPS'}
+                </button>
+                <button
+                  className="btn btn-outline-light btn-sm d-flex align-items-center gap-1"
+                  onClick={() => setCamadaSatelite(!camadaSatelite)}
+                >
+                  <Layers size={15} />
+                  {camadaSatelite ? 'Mapa' : 'Satélite'}
+                </button>
+              </>
+            )}
+            
           </div>
         </div>
       </nav>
 
-      <main className="container py-4">
-        {/* Barra de Busca e Filtro de Status */}
-        <div className="card bg-body-tertiary border-secondary-subtle mb-3">
-          <div className="card-body py-2 px-3 row g-2 align-items-center">
-            <div className="col-md-6">
-              <div className="input-group input-group-sm">
-                <span className="input-group-text"><Search size={14} /></span>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Filtrar por quadra (ex: QR 406, QN 314, QS 108), CEP ou problema..."
-                  value={buscaQuadra}
-                  onChange={(e) => setBuscaQuadra(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="col-md-6 d-flex justify-content-md-end gap-2 flex-wrap">
-              {['TODOS', 'ABERTO', 'RESOLVIDO'].map((st) => (
-                <button
-                  key={st}
-                  onClick={() => setFiltroStatus(st)}
-                  className={`btn btn-sm ${filtroStatus === st ? 'btn-primary' : 'btn-outline-secondary'}`}
-                >
-                  {st === 'TODOS' ? 'Todos os Status' : st === 'ABERTO' ? 'Em Aberto' : 'Resolvidos (últimos 3 dias)'}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Mapa Interativo */}
-        <section className="mb-4">
-          <MapaRegiao
-            ocorrencias={ocorrenciasFiltradas}
-            eventos={eventosFiltrados}
-            pontoSelecionado={pontoSelecionado}
-            minhaLocalizacao={minhaLocalizacao}
-            onSelecionarPonto={handleCliqueMapa}
-            centroMapa={centroMapa}
-            zoomMapa={zoomMapa}
-            camadaSatelite={camadaSatelite}
-            buscandoCep={buscandoGeo}
-          />
-          <div className="d-flex justify-content-between flex-wrap small text-secondary mt-2 gap-2">
-            <span>Toque no mapa ou use o GPS para preencher CEP e quadra automaticamente. Ocorrências resolvidas saem do mapa após 3 dias.</span>
-            <div className="d-flex align-items-center gap-3">
-              <span><span className="badge rounded-pill bg-info me-1">&nbsp;</span>Você</span>
-              <span><span className="badge rounded-pill bg-danger me-1">&nbsp;</span>Aberto</span>
-              <span><span className="badge rounded-pill bg-success me-1">&nbsp;</span>Resolvido</span>
-              <span><span className="badge rounded-pill bg-primary me-1">&nbsp;</span>Evento</span>
-            </div>
-          </div>
-        </section>
-
-        {erroForm && <div className="alert alert-danger py-2 small">{erroForm}</div>}
-
-        {/* Abas */}
-        <ul className="nav nav-pills mb-4 gap-2">
+      <main className="container py-3">
+        {/* Abas principais */}
+        <ul className="nav nav-pills mb-3 gap-2">
           <li className="nav-item">
             <button
-              className={`nav-link d-flex align-items-center gap-2 ${aba === 'ocorrencias' ? 'active' : 'bg-body-tertiary text-light'}`}
+              className={`nav-link btn-sm d-flex align-items-center gap-2 ${aba === 'ocorrencias' ? 'active' : 'bg-body-tertiary text-light'}`}
               onClick={() => { setAba('ocorrencias'); setErroForm(''); setInfoFoto(''); }}
             >
-              <AlertTriangle size={16} /> Problemas Urbanos ({ocorrenciasFiltradas.length})
+              <AlertTriangle size={15} /> Problemas ({ocorrenciasFiltradas.length})
             </button>
           </li>
           <li className="nav-item">
             <button
-              className={`nav-link d-flex align-items-center gap-2 ${aba === 'eventos' ? 'active' : 'bg-body-tertiary text-light'}`}
+              className={`nav-link btn-sm d-flex align-items-center gap-2 ${aba === 'eventos' ? 'active' : 'bg-body-tertiary text-light'}`}
               onClick={() => { setAba('eventos'); setErroForm(''); setInfoFoto(''); }}
             >
-              <Calendar size={16} /> Agenda Comunitária ({eventosFiltrados.length})
+              <Calendar size={15} /> Eventos ({eventosFiltrados.length})
+            </button>
+          </li>
+          <li className="nav-item ms-md-auto">
+            <button
+              className={`nav-link btn-sm d-flex align-items-center gap-2 ${aba === 'avaliacao' ? 'active' : 'bg-body-tertiary text-info border border-info-subtle'}`}
+              onClick={() => { setAba('avaliacao'); setErroForm(''); setInfoFoto(''); }}
+            >
+              <MessageSquare size={15} /> Avaliar Portal
             </button>
           </li>
         </ul>
+
+        {/* Mapa e filtros exibidos apenas nas abas de Problemas e Eventos */}
+        {aba !== 'avaliacao' && (
+          <>
+            <div className="card bg-body-tertiary border-secondary-subtle mb-3">
+              <div className="card-body py-2 px-3 row g-2 align-items-center">
+                <div className="col-md-6">
+                  <div className="input-group input-group-sm">
+                    <span className="input-group-text"><Search size={14} /></span>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Buscar por quadra (ex: QR 406), CEP ou título..."
+                      value={buscaQuadra}
+                      onChange={(e) => setBuscaQuadra(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="col-md-6 d-flex justify-content-md-end gap-2 flex-wrap">
+                  {['TODOS', 'ABERTO', 'RESOLVIDO'].map((st) => (
+                    <button
+                      key={st}
+                      onClick={() => setFiltroStatus(st)}
+                      className={`btn btn-sm ${filtroStatus === st ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    >
+                      {st === 'TODOS' ? 'Todos' : st === 'ABERTO' ? 'Em Aberto' : 'Resolvidos'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <section className="mb-3">
+              <MapaRegiao
+                ocorrencias={ocorrenciasFiltradas}
+                eventos={eventosFiltrados}
+                pontoSelecionado={pontoSelecionado}
+                minhaLocalizacao={minhaLocalizacao}
+                onSelecionarPonto={handleCliqueMapa}
+                centroMapa={centroMapa}
+                zoomMapa={zoomMapa}
+                camadaSatelite={camadaSatelite}
+                buscandoCep={buscandoGeo}
+              />
+              <div className="d-flex justify-content-end flex-wrap small text-secondary mt-2 gap-3">
+                <span><span className="badge rounded-pill bg-info me-1">&nbsp;</span>Você</span>
+                <span><span className="badge rounded-pill bg-danger me-1">&nbsp;</span>Aberto</span>
+                <span><span className="badge rounded-pill bg-success me-1">&nbsp;</span>Resolvido</span>
+                <span><span className="badge rounded-pill bg-primary me-1">&nbsp;</span>Evento</span>
+              </div>
+            </section>
+          </>
+        )}
+
+        {erroForm && <div className="alert alert-danger py-2 small">{erroForm}</div>}
 
         {/* ABA PROBLEMAS */}
         {aba === 'ocorrencias' && (
@@ -384,13 +399,13 @@ export default function App() {
                     onClick={() => usarMinhaLocalizacao('ocorrencia')}
                     className="btn btn-outline-info btn-sm py-0 px-2 d-flex align-items-center gap-1"
                   >
-                    <LocateFixed size={13} /> Puxar GPS + CEP
+                    <LocateFixed size={13} /> GPS + CEP
                   </button>
                 </div>
                 <form className="card-body" onSubmit={criarOcorrencia}>
                   <div className="row g-2 mb-3">
                     <div className="col-5">
-                      <label className="form-label small text-secondary">CEP (ViaCEP)</label>
+                      <label className="form-label small text-secondary">CEP</label>
                       <input
                         className="form-control form-control-sm"
                         placeholder="72300-000"
@@ -407,7 +422,7 @@ export default function App() {
                       <label className="form-label small text-secondary">Quadra / Setor</label>
                       <input
                         className="form-control form-control-sm"
-                        placeholder="Ex: QR 406, QN 314, QS 108"
+                        placeholder="Ex: QR 406"
                         value={formOcorrencia.quadra}
                         onChange={(e) => setFormOcorrencia({ ...formOcorrencia, quadra: e.target.value })}
                         required
@@ -439,13 +454,13 @@ export default function App() {
                   </div>
 
                   <div className="mb-3">
-                    <label className="form-label small text-secondary">Título do Problema</label>
-                    <input className="form-control form-control-sm" placeholder="Ex: Poste apagado há uma semana" value={formOcorrencia.titulo} onChange={(e) => setFormOcorrencia({ ...formOcorrencia, titulo: e.target.value })} required />
+                    <label className="form-label small text-secondary">Título</label>
+                    <input className="form-control form-control-sm" placeholder="Ex: Poste apagado" value={formOcorrencia.titulo} onChange={(e) => setFormOcorrencia({ ...formOcorrencia, titulo: e.target.value })} required />
                   </div>
 
                   <div className="mb-3">
                     <label className="form-label small text-secondary">Descrição</label>
-                    <textarea className="form-control form-control-sm" rows={2} placeholder="Detalhes para a equipe de manutenção..." value={formOcorrencia.descricao} onChange={(e) => setFormOcorrencia({ ...formOcorrencia, descricao: e.target.value })} required />
+                    <textarea className="form-control form-control-sm" rows={2} placeholder="Detalhes do local..." value={formOcorrencia.descricao} onChange={(e) => setFormOcorrencia({ ...formOcorrencia, descricao: e.target.value })} required />
                   </div>
 
                   <div className="form-check form-switch mb-3">
@@ -463,7 +478,7 @@ export default function App() {
 
                   <div className="mb-3">
                     <label className="btn btn-outline-secondary btn-sm w-100 d-flex align-items-center justify-content-center gap-2">
-                      <Camera size={15} /> Foto do Problema (máx. 5 MB)
+                      <Camera size={15} /> Anexar Foto
                       <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => handleUploadFoto(e, 'ocorrencia')} hidden />
                     </label>
                     {infoFoto && <div className="form-text text-success">{infoFoto}</div>}
@@ -480,11 +495,10 @@ export default function App() {
               </div>
             </div>
 
-            {/* Cards de Problemas */}
             <div className="col-lg-7">
               {ocorrenciasFiltradas.length === 0 ? (
                 <div className="card bg-body-tertiary border-secondary-subtle p-4 text-center text-secondary small">
-                  Nenhum problema ativo encontrado para esta busca.
+                  Nenhum problema encontrado.
                 </div>
               ) : (
                 <div className="row g-3">
@@ -526,7 +540,7 @@ export default function App() {
                                 <div className="d-flex gap-2">
                                   {item.status !== 'RESOLVIDO' && (
                                     <button onClick={() => marcarResolvido(item.id)} className="btn btn-outline-success btn-sm py-0 px-2">
-                                      Marcar Resolvido
+                                      Resolver
                                     </button>
                                   )}
                                   <button onClick={() => apoiarOcorrencia(item.id)} className="btn btn-outline-light btn-sm py-0 px-2 d-flex align-items-center gap-1">
@@ -558,7 +572,7 @@ export default function App() {
                     onClick={() => usarMinhaLocalizacao('evento')}
                     className="btn btn-outline-info btn-sm py-0 px-2 d-flex align-items-center gap-1"
                   >
-                    <LocateFixed size={13} /> Puxar GPS + CEP
+                    <LocateFixed size={13} /> GPS + CEP
                   </button>
                 </div>
                 <form className="card-body" onSubmit={criarEvento}>
@@ -579,7 +593,7 @@ export default function App() {
                     </div>
                     <div className="col-7">
                       <label className="form-label small text-secondary">Quadra / Setor</label>
-                      <input className="form-control form-control-sm" placeholder="Ex: QR 406, QN 314" value={formEvento.quadra} onChange={(e) => setFormEvento({ ...formEvento, quadra: e.target.value })} required />
+                      <input className="form-control form-control-sm" placeholder="Ex: QR 406" value={formEvento.quadra} onChange={(e) => setFormEvento({ ...formEvento, quadra: e.target.value })} required />
                     </div>
                   </div>
                   <div className="mb-3">
@@ -604,7 +618,7 @@ export default function App() {
                   </div>
                   <div className="mb-3">
                     <label className="btn btn-outline-secondary btn-sm w-100 d-flex align-items-center justify-content-center gap-2">
-                      <Camera size={15} /> Banner / Foto (máx. 5 MB)
+                      <Camera size={15} /> Banner / Foto
                       <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => handleUploadFoto(e, 'evento')} hidden />
                     </label>
                     {infoFoto && <div className="form-text text-success">{infoFoto}</div>}
@@ -622,7 +636,7 @@ export default function App() {
             <div className="col-lg-7">
               {eventosFiltrados.length === 0 ? (
                 <div className="card bg-body-tertiary border-secondary-subtle p-4 text-center text-secondary small">
-                  Nenhum evento programado para esta busca.
+                  Nenhum evento programado.
                 </div>
               ) : (
                 <div className="d-flex flex-column gap-3">
@@ -655,6 +669,11 @@ export default function App() {
               )}
             </div>
           </div>
+        )}
+
+        {/* ABA AVALIAÇÃO (FORMULÁRIO NATIVO INTEGRADO AO GOOGLE FORMS) */}
+        {aba === 'avaliacao' && (
+          <FormularioAvaliacao onVoltar={() => setAba('ocorrencias')} />
         )}
       </main>
     </div>
